@@ -1,0 +1,118 @@
+// This a Magma code implementation of a root-finding algorithm.
+// Such algorithm finds all the roots of polynomials h^\sigma(x)),
+// which is degree-(q^d) sparse polynomial in F_q[x].
+
+clear;
+
+p := 3;			// a prime number p >= 2 
+n := 2;			// an integer >= 1
+q := p^n;		// p^n
+
+F_p := GF(p);						// F_p
+P_p<t> := PolynomialRing(F_p);		// F_p[t]
+
+poly_q_n := P_p!IrreduciblePolynomial(F_p, n);
+
+F_q<u> := ext<F_p| poly_q_n>;		// F_{p^n}
+P_q<w> := PolynomialRing(F_q);		// F_{p^n}[w]
+
+/* --------------------------------- *
+ * sigma_map: F_ql[x] X ZZ -> F_q[x] *
+ *               (z,q)  -> z^q       *
+ * --------------------------------- */
+sigma_map := function(var_el, var_q)
+	return var_el^var_q;
+end function;
+
+/* ------------------------------------------------ *
+ * horner_map: F_p[x] X F_ql[x] X ZZ -> F_q[x]      *
+ *                   (h(x), z, q)    -> h^\sigma(z) *
+ * ------------------------------------------------ */
+horner_map := function(var_poly, var_z, var_q)
+	var_c := Reverse(Coefficients(var_poly));
+	var_eval := Parent(var_z)!0;
+	for el_i in var_c do
+		var_eval := ( el_i * var_z) + sigma_map(var_eval, var_q);
+	end for;
+	return var_eval;
+end function;
+
+/* -------------------------------------------------- *
+ * V_pTOsigma: F_p[x] -> F_{q^l}                      *
+ *              h(x)  -> all the roots of h^\sigma(x) *
+ *                       that belong to F_{q^l}       *
+ * -------------------------------------------------- */
+V_pTOsigma := function(var_poly, degree)
+	l := (#BaseRing(var_poly))^degree - 1;
+
+	assert( (Log(2,p)*n*l) lt (2^13) );
+	poly_q_l := P_q!IrreduciblePolynomial(F_q, l);	// Irreducible degree-l polynomial
+	F_ql<v>:= ext<F_q| poly_q_l>;					// F_{q^l}
+
+	eta_at_j := F_ql!1;								// initial value 1 = eta^0
+	C_hTOsigma := ZeroMatrix(F_q, l, l);
+	for idx_i in [1 .. l] do	 					// Constructing C_{h^\sigma}
+		// p^\sigma(\eta^j)
+		pol_aux := horner_map(var_poly, eta_at_j, q);
+		// the j-th row of C_{h^\sigma}
+		C_hTOsigma[idx_i]:= Vector(Eltseq(pol_aux));
+		eta_at_j *:= v;
+	end for;
+
+	return Kernel(C_hTOsigma), poly_q_l;
+end function;
+
+
+// --------------------------------------------------------
+d := 3; // integer number >= 1
+h := P_p!RandomIrreduciblePolynomial(F_p, d);	// Random polynomial in F_p[x]
+//h := P_q!RandomIrreduciblePolynomial(F_q, d);	// Random polynomial in F_q[x]
+
+printf "Framework: q <- %o^%o, \n\n", p, n;
+printf "degree-%o polynomial to be used: %o\n", d, h;
+
+tOUR_METHOD_0 := Cputime();
+roots_by_this_work, poly_q_l := V_pTOsigma(h, d);
+tOUR_METHOD_1 := Cputime();
+printf "[This work: V_{h^\sigma}]\t";
+printf "Number of roots computed q^%o, ", Floor(Log(q, #roots_by_this_work));
+printf"and it took %07.3o seconds\n", tOUR_METHOD_1 - tOUR_METHOD_0;
+
+F_ql<v>:= ext<F_q| poly_q_l>;		// F_{q^l}
+P_ql<z> := PolynomialRing(F_ql);	// F_{q^l}[z]
+
+r_i := Random(roots_by_this_work);
+if( horner_map(h, F_ql!Eltseq(r_i), q) ne F_ql!0 ) then 
+	printf "\n\tThere was a really weird error.\n\tThis will not ever happen!\n."; 
+	roots_by_this_work;
+	exit;
+end if;
+
+// --------------------------------------------------------
+// --------------------------------------------------------
+// Comparing with the other methods: Magma implemented algorithms
+try
+	h_TOsigma := horner_map(h, z, q);	// h^\sigma(x) over F_ql
+	tRootsF_0 := Cputime();
+	roots_by_roots_function := Roots(h_TOsigma, F_ql : Al:="Schonhage", IsSquarefree:=true);
+	tRootsF_1 := Cputime();
+	printf "[Using function Roots()]\t";
+	printf "Number of roots computed q^%o, ", Floor(Log(q, #roots_by_roots_function));
+	printf"and it took %07.3o seconds\n", tRootsF_1 - tRootsF_0;
+
+	tFB_0 := Cputime();
+	roots_by_Berlekamp := Factorization(h_TOsigma);
+	tFB_1 := Cputime();
+	printf "[Using Berlekamp method]\t";
+	printf "Number of roots computed q^%o, ", Floor(Log(q, #roots_by_Berlekamp));
+	printf"and it took %07.3o seconds\n", tFB_1 - tFB_0;
+
+	tGKS_0 := Cputime();
+	roots_by_GKS := Factorization(h_TOsigma: Al := "GKS");
+	tGKS_1 := Cputime();
+	printf "[Using    G.K.S. method]\t";
+	printf "Number of roots computed q^%o, ", Floor(Log(q, #roots_by_GKS));
+	printf"and it took %07.3o seconds\n", tGKS_1 - tGKS_0;
+catch e
+	print "[NOT SUPPORTED BY MAGMA] ", e`Object;
+end try;
