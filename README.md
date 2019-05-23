@@ -10,7 +10,10 @@ This project was done by
 # Requirements
 
 [To run in a personal machine]
-To have install any version of the Magma Computational Algebra System.
+To have install any version of the Magma Computational Algebra System, and 
+to run
+
+      magma root_finding_algorithm.magma
 
 [To run using the online calculator]
 To paste the Magma code implementation in the calculator, which can be
